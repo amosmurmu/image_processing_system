@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="index.css" />
+    <script src="../services/index.ts"></script>
+    <title>Image Processing Service</title>
+  </head>
+  <body>
+    <h2>File Upload</h2>
+    <form
+      action="../../api/upload"
+      id="uploadForm"
+      method="post"
+      enctype="multipart/form-data"
+    >
+      <div class="container">
+        <input type="file" id="fileInput" placeholder="Upload your CSB" />
+        <!-- <label for="fileInput">UPLOAD YOUR FILE</label> -->
+        <button type="submit">Submit</button>
+      </div>
+    </form>
+  </body>
+</html>
