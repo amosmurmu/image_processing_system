@@ -3,6 +3,7 @@ import pool from "../services/db";
 import * as fs from "fs";
 import { parse } from "csv-parse";
 import path from "path";
+import crypto from "crypto";
 
 export const getIndex = async (
   req: Request,
@@ -28,22 +29,38 @@ export const createRequest = async (
 
     if (!file?.mimetype.includes("csv")) {
       res.status(400).json({ error: "Invalid file type, only CSV allowed" });
+      return;
     }
 
     const filePath = file?.path;
-
     fs.createReadStream(filePath)
       .pipe(parse({ columns: true, trim: true }))
       .on("data", (row) => {
         if (!row.product_name || !row.input_images) {
-          res
-            .status(400)
-            .json({ error: "Invalid CSV format, missing columns" });
+          return next(new Error("Invalid CSV format , missing columns"));
         }
+      })
+      .on("error", (err) => {
+        return next(new Error(`File read error: ${err.message}`));
       });
 
+    const fileBuffer = fs.readFileSync(filePath);
+    // console.log(fileBuffer);
+    const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+
+    const { rowCount } = await pool.query(
+      "SELECT id FROM requests WHERE file_hash = $1",
+      [hash]
+    );
+
+    if ((rowCount ?? 0) > 0) {
+      res.status(400).json({ error: "Duplicate file detected" });
+      return;
+    }
+
     const { rows } = await pool.query(
-      "INSERT INTO requests (status) VALUES ('PENDING') RETURNING id"
+      "INSERT INTO requests (status,file_hash) VALUES ('PENDING',$1) RETURNING id",
+      [hash]
     );
 
     const requestId = rows[0].id;
