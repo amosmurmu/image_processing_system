@@ -4,17 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Upload Successful</title>
+    <script src="/success.js" defer></script>
   </head>
   <body>
     <h1>Upload Successful!</h1>
     <p>Your Request ID is: <span id="request-id"></span></p>
     <a href="/">Go Back</a>
-
-    <script>
-      // Get requestId from URL and display it
-      const params = new URLSearchParams(window.location.search);
-      document.getElementById("request-id").textContent =
-        params.get("requestId");
-    </script>
   </body>
 </html>

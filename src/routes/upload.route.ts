@@ -1,6 +1,10 @@
 import express from "express";
 import multer from "multer";
-import { getIndex, createRequest } from "../controllers/upload.controller";
+import {
+  getIndex,
+  createRequest,
+  createProduct,
+} from "../controllers/upload.controller";
 import path from "path";
 
 const router = express.Router();

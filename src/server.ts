@@ -1,7 +1,8 @@
 import express, { Request, Response, NextFunction } from "express";
 
 import uploadRoutes from "./routes/upload.route";
-
+import statusRoutes from "./routes/status.route";
+import path from "path";
 const app = express();
 
 const PORT = process.env.PORT || 3000;
@@ -11,7 +12,9 @@ app.get("/", (req, res) => {
 });
 
 app.use(express.json()); // Middleware to parse JSON
+app.use(express.static("public")); // Serve static files
 app.use("/api", uploadRoutes);
+app.use("/api", statusRoutes);
 
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error(err);

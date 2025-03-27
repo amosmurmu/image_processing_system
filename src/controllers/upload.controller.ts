@@ -4,6 +4,46 @@ import * as fs from "fs";
 import { parse } from "csv-parse";
 import path from "path";
 import crypto from "crypto";
+import cloudinary from "../services/cloudinary";
+import axios from "axios";
+import sharp from "sharp";
+
+// Trying upload to cloudinary
+
+const uploadToCloudinary = async (
+  buffer: Buffer,
+  filename: string
+): Promise<string> => {
+  const tempFilePath = `./uploads/temp-${filename}.jpg`;
+  fs.writeFileSync(tempFilePath, buffer);
+
+  try {
+    const uniqueId = `compressed-${Date.now()}`;
+    const result = await cloudinary.uploader.upload(tempFilePath, {
+      public_id: uniqueId,
+      folder: "compressed_images",
+      resource_type: "image",
+    });
+    fs.unlinkSync(tempFilePath);
+    return result.secure_url;
+  } catch (error) {
+    console.error("Cloudinary upload error:", error);
+    throw new Error("Failed to upload to Cloudinary");
+  }
+};
+
+function parseInputImages(input_images: any) {
+  if (!input_images.includes("[") && !input_images.includes(",")) {
+    return [input_images.trim()];
+  } else {
+    try {
+      return JSON.parse(input_images.replace(/'/g, '"')); // Convert single to double quotes before parsing
+    } catch (error) {
+      console.error("Invalid input_images format:", input_images, error);
+      return []; // Fallback to empty array if parsing fails
+    }
+  }
+}
 
 export const getIndex = async (
   req: Request,
@@ -20,7 +60,7 @@ export const createRequest = async (
 ) => {
   try {
     const file = req.file;
-    console.log("Request Body:", req.body);
+    console.log("File in request", req.file);
 
     if (!file?.path) {
       res.status(400).json({ error: "No file uploaded" });
@@ -59,55 +99,36 @@ export const createRequest = async (
     }
 
     const { rows } = await pool.query(
-      "INSERT INTO requests (status,file_hash) VALUES ('PENDING',$1) RETURNING id",
-      [hash]
+      "INSERT INTO requests (status,file_hash,file_path) VALUES ('PENDING',$1,$2) RETURNING id",
+      [hash, filePath]
     );
 
     const requestId = rows[0].id;
 
+    await createProduct(requestId, filePath);
     res.redirect(`/api/success?requestId=${requestId}`);
   } catch (error) {
     next(error);
   }
 };
 
-export const createProduct = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const createProduct = async (requestId: string, filePath: string) => {
   try {
-    const file = req.file;
-    const requestId = req.query.requestId;
-    console.log("Request Body:", req.body);
-    console.log(file);
+    console.log(requestId);
 
-    if (!requestId) {
-      return res.status(400).json({ error: "Request ID is required" });
-    }
-    if (!file?.path) {
-      res.status(400).json({ error: "No file uploaded" });
-      return;
-    }
-
-    const filePath = file?.path;
-
+    console.log(filePath);
     const products: { product_name: string; input_images: string[] }[] = [];
 
     fs.createReadStream(filePath)
       .pipe(parse({ columns: true, trim: true }))
       .on("data", (row) => {
         if (!row.product_name || !row.input_images) {
-          res
-            .status(400)
-            .json({ error: "Invalid CSV format, missing columns" });
+          throw new Error("Invalid CSV format , missing columns");
         }
 
         products.push({
           product_name: row.product_name,
-          input_images: row.input_images.includes(",")
-            ? row.input_images.split(",")
-            : [row.input_images],
+          input_images: parseInputImages(row.input_images),
         });
       })
       .on("end", async () => {
@@ -115,21 +136,55 @@ export const createProduct = async (
           "INSERT INTO products (request_id, product_name,input_images, output_images) VALUES ($1,$2,$3,$4)";
 
         for (const product of products) {
+          const outputImages: string[] = [];
+          const csvRow = product.input_images;
+          const imageUrls = csvRow
+            .map((url) => url.trim())
+            .filter((url) => url !== "");
+          for (const image of imageUrls) {
+            try {
+              const response = await axios({
+                url: image,
+                responseType: "arraybuffer",
+              });
+
+              const compressedBuffer = await sharp(response.data)
+                .jpeg({ quality: 50 })
+                .toBuffer();
+
+              const outputUrl = await uploadToCloudinary(
+                compressedBuffer,
+                `compressed-${Date.now()}`
+              );
+              outputImages.push(outputUrl);
+            } catch (error) {
+              console.error(`Error processing image : ${image},`, error);
+            }
+          }
+
           await pool.query(query, [
             requestId,
             product.product_name,
             product.input_images,
-            [],
+            outputImages,
           ]);
         }
-        console.log("Uploaded file:", req.file); // Verify file exists
-        res.json({ message: "CSV uploaded successfully", requestId });
+        console.log(
+          "CSV processed successfully and products added for request",
+          requestId
+        );
+
+        const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
+        await pool.query(reqQuery, ["PROCESSED", requestId]);
+        console.log("Status Updated to PROCESSED");
       })
-      .on("error", (error) => {
+      .on("error", async (error) => {
         console.error(error);
-        res.status(500).json({ error: "Error processing CSV File" });
+        const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
+        await pool.query(reqQuery, [requestId]);
+        console.log("Status Updated to FAILED");
       });
   } catch (error) {
-    next(error);
+    console.error("Error in createProduct", error);
   }
 };
