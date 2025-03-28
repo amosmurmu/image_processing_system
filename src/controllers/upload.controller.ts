@@ -106,6 +106,7 @@ export const createRequest = async (
     const requestId = rows[0].id;
 
     await createProduct(requestId, filePath);
+    console.log(req.url, req.query);
     res.redirect(`/api/success?requestId=${requestId}`);
   } catch (error) {
     next(error);
