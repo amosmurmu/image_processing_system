@@ -131,43 +131,59 @@ export const createProduct = async (requestId: string, filePath: string) => {
           input_images: parseInputImages(row.input_images),
         });
       })
+      .on("error", async (error) => {
+        console.error(error);
+        const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
+        await pool.query(reqQuery, ["FAILED", requestId]);
+        console.log("Status Updated to FAILED");
+      })
       .on("end", async () => {
-        const query =
-          "INSERT INTO products (request_id, product_name,input_images, output_images) VALUES ($1,$2,$3,$4)";
+        try {
+          const processingQuery =
+            "UPDATE requests SET status = $1 WHERE id= $2";
+          await pool.query(processingQuery, ["PROCESSING", requestId]);
+          console.log("Status Updated to PROCESSING");
 
-        for (const product of products) {
-          const outputImages: string[] = [];
-          const csvRow = product.input_images;
-          const imageUrls = csvRow
-            .map((url) => url.trim())
-            .filter((url) => url !== "");
-          for (const image of imageUrls) {
-            try {
-              const response = await axios({
-                url: image,
-                responseType: "arraybuffer",
-              });
+          const query =
+            "INSERT INTO products (request_id, product_name,input_images, output_images) VALUES ($1,$2,$3,$4)";
 
-              const compressedBuffer = await sharp(response.data)
-                .jpeg({ quality: 50 })
-                .toBuffer();
+          for (const product of products) {
+            const outputImages: string[] = [];
+            const csvRow = product.input_images;
+            const imageUrls = csvRow
+              .map((url) => url.trim())
+              .filter((url) => url !== "");
+            for (const image of imageUrls) {
+              try {
+                const response = await axios({
+                  url: image,
+                  responseType: "arraybuffer",
+                });
 
-              const outputUrl = await uploadToCloudinary(
-                compressedBuffer,
-                `compressed-${Date.now()}`
-              );
-              outputImages.push(outputUrl);
-            } catch (error) {
-              console.error(`Error processing image : ${image},`, error);
+                const compressedBuffer = await sharp(response.data)
+                  .jpeg({ quality: 50 })
+                  .toBuffer();
+
+                const outputUrl = await uploadToCloudinary(
+                  compressedBuffer,
+                  `compressed-${Date.now()}`
+                );
+                outputImages.push(outputUrl);
+              } catch (error) {
+                console.error(`Error processing image : ${image},`, error);
+              }
             }
-          }
 
-          await pool.query(query, [
-            requestId,
-            product.product_name,
-            product.input_images,
-            outputImages,
-          ]);
+            await pool.query(query, [
+              requestId,
+              product.product_name,
+              product.input_images,
+              outputImages,
+            ]);
+          }
+        } catch (error) {
+          console.log("Error processing CSV File");
+          return;
         }
         console.log(
           "CSV processed successfully and products added for request",
@@ -177,14 +193,26 @@ export const createProduct = async (requestId: string, filePath: string) => {
         const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
         await pool.query(reqQuery, ["PROCESSED", requestId]);
         console.log("Status Updated to PROCESSED");
-      })
-      .on("error", async (error) => {
-        console.error(error);
-        const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
-        await pool.query(reqQuery, [requestId]);
-        console.log("Status Updated to FAILED");
+
+        await triggerWebhook(
+          requestId,
+          "https://webhook.site/ffd59d5f-d778-4f02-ab37-04ad438ca644"
+        );
       });
   } catch (error) {
     console.error("Error in createProduct", error);
+  }
+};
+
+const triggerWebhook = async (requestId: string, webhookUrl: string) => {
+  try {
+    await axios.post(webhookUrl, {
+      requestId: requestId,
+      status: "PROCESSED",
+    });
+
+    console.log("Webhook successfully triggered");
+  } catch (error) {
+    console.error("Error triggerring webhook:", error);
   }
 };

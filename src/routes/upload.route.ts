@@ -1,10 +1,6 @@
 import express from "express";
 import multer from "multer";
-import {
-  getIndex,
-  createRequest,
-  createProduct,
-} from "../controllers/upload.controller";
+import { getIndex, createRequest } from "../controllers/upload.controller";
 import path from "path";
 
 const router = express.Router();
@@ -17,5 +13,4 @@ router.get("/success", (req, res) => {
   // console.log("apple");
   res.sendFile(path.join(__dirname, "../views/success.html"));
 });
-
 export default router;

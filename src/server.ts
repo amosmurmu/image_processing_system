@@ -2,7 +2,6 @@ import express, { Request, Response, NextFunction } from "express";
 
 import uploadRoutes from "./routes/upload.route";
 import statusRoutes from "./routes/status.route";
-import path from "path";
 const app = express();
 
 const PORT = process.env.PORT || 3000;
