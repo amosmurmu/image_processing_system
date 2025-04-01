@@ -1,5 +1,6 @@
 import pool from "../services/db";
 import { Request, Response } from "express";
+import client from "../services/redis";
 
 export const checkStatus = async (
   req: Request,
@@ -13,6 +14,13 @@ export const checkStatus = async (
       return;
     }
 
+    const cachedStatus = await client.get(`status:${requestId}`);
+    if (cachedStatus) {
+      console.log("Cache Hit..");
+      res.json({ requestId, status: cachedStatus, products: [] });
+      return;
+    }
+
     const query = "SELECT status FROM requests WHERE id = $1";
     const result = await pool.query(query, [requestId]);
 
@@ -23,14 +31,16 @@ export const checkStatus = async (
 
     const status = result.rows[0].status;
 
+    await client.setex(`status:${requestId}`, 300, status);
+
     let products = [];
     if (status === "PROCESSED") {
       const productQuery = "SELECT * FROM products WHERE request_id = $1";
       const productResult = await pool.query(productQuery, [requestId]);
       products = productResult.rows;
     }
-
-    res.json({ status, products });
+    console.log("Cache Miss, storing data...");
+    res.json({ requestId, status, products });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
