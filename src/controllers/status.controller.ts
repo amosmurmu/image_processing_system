@@ -11,13 +11,6 @@ export const checkStatus = async (req: Request, res: Response) => {
       return;
     }
 
-    const cachedStatus = await redis.get(`status:${requestId}`);
-    if (cachedStatus) {
-      console.log("Cache Hit.. for status");
-      res.json({ requestId, status: cachedStatus, products: [] });
-      return;
-    }
-
     const query = "SELECT status FROM requests WHERE id = $1";
     const result = await pool.query(query, [requestId]);
 
@@ -27,16 +20,25 @@ export const checkStatus = async (req: Request, res: Response) => {
     }
 
     const status = result.rows[0].status;
-
-    await redis.setex(`status:${requestId}`, 300, status);
-
-    let products = [];
+    let products: any = [];
     if (status === "PROCESSED") {
       const productQuery = "SELECT * FROM products WHERE request_id = $1";
       const productResult = await pool.query(productQuery, [requestId]);
       products = productResult.rows;
+
+      res.json({ requestId, status: status, products: products });
+      return;
     }
+    const cachedStatus = await redis.get(`status:${requestId}`);
+    if (cachedStatus) {
+      console.log("Cache Hit.. for status");
+      res.json({ requestId, status: cachedStatus, products: products });
+      return;
+    }
+
     console.log("Cache Miss, storing data... in redis");
+    await redis.setex(`status:${requestId}`, 300, status);
+
     res.json({ requestId, status, products });
   } catch (error) {
     console.error(error);
