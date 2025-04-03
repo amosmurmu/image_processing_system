@@ -1,11 +1,8 @@
 import pool from "../services/db";
 import { Request, Response } from "express";
-import client from "../services/redis";
+import redis from "../services/redis";
 
-export const checkStatus = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
+export const checkStatus = async (req: Request, res: Response) => {
   try {
     const requestId = req.params.requestId;
 
@@ -14,9 +11,9 @@ export const checkStatus = async (
       return;
     }
 
-    const cachedStatus = await client.get(`status:${requestId}`);
+    const cachedStatus = await redis.get(`status:${requestId}`);
     if (cachedStatus) {
-      console.log("Cache Hit..");
+      console.log("Cache Hit.. for status");
       res.json({ requestId, status: cachedStatus, products: [] });
       return;
     }
@@ -31,7 +28,7 @@ export const checkStatus = async (
 
     const status = result.rows[0].status;
 
-    await client.setex(`status:${requestId}`, 300, status);
+    await redis.setex(`status:${requestId}`, 300, status);
 
     let products = [];
     if (status === "PROCESSED") {
@@ -39,7 +36,7 @@ export const checkStatus = async (
       const productResult = await pool.query(productQuery, [requestId]);
       products = productResult.rows;
     }
-    console.log("Cache Miss, storing data...");
+    console.log("Cache Miss, storing data... in redis");
     res.json({ requestId, status, products });
   } catch (error) {
     console.error(error);

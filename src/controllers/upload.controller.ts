@@ -7,6 +7,7 @@ import crypto from "crypto";
 import cloudinary from "../services/cloudinary";
 import axios from "axios";
 import sharp from "sharp";
+import { productQueue } from "../services/redis";
 
 // Trying upload to cloudinary
 
@@ -105,103 +106,108 @@ export const createRequest = async (
 
     const requestId = rows[0].id;
 
-    await createProduct(requestId, filePath);
-    console.log(req.url, req.query);
-    res.redirect(`/api/success?requestId=${requestId}`);
+    await addProductJob(requestId, filePath);
+    // console.log(req.url, req.query);
+    return res.redirect(`/api/success?requestId=${requestId}`);
   } catch (error) {
     next(error);
   }
+};
+
+export const addProductJob = async (requestId: string, filePath: string) => {
+  await productQueue.add("createProduct", { requestId, filePath });
+  console.log(`Job added to queue: ${requestId}`);
 };
 
 export const createProduct = async (requestId: string, filePath: string) => {
   try {
     console.log(requestId);
 
-    console.log(filePath);
+    // console.log(filePath);
     const products: { product_name: string; input_images: string[] }[] = [];
 
-    fs.createReadStream(filePath)
-      .pipe(parse({ columns: true, trim: true }))
-      .on("data", (row) => {
-        if (!row.product_name || !row.input_images) {
-          throw new Error("Invalid CSV format , missing columns");
-        }
-
-        products.push({
-          product_name: row.product_name,
-          input_images: parseInputImages(row.input_images),
-        });
-      })
-      .on("error", async (error) => {
-        console.error(error);
-        const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
-        await pool.query(reqQuery, ["FAILED", requestId]);
-        console.log("Status Updated to FAILED");
-      })
-      .on("end", async () => {
-        try {
-          const processingQuery =
-            "UPDATE requests SET status = $1 WHERE id= $2";
-          await pool.query(processingQuery, ["PROCESSING", requestId]);
-          console.log("Status Updated to PROCESSING");
-
-          const query =
-            "INSERT INTO products (request_id, product_name,input_images, output_images) VALUES ($1,$2,$3,$4)";
-
-          for (const product of products) {
-            const outputImages: string[] = [];
-            const csvRow = product.input_images;
-            const imageUrls = csvRow
-              .map((url) => url.trim())
-              .filter((url) => url !== "");
-            for (const image of imageUrls) {
-              try {
-                const response = await axios({
-                  url: image,
-                  responseType: "arraybuffer",
-                });
-
-                const compressedBuffer = await sharp(response.data)
-                  .jpeg({ quality: 50 })
-                  .toBuffer();
-
-                const outputUrl = await uploadToCloudinary(
-                  compressedBuffer,
-                  `compressed-${Date.now()}`
-                );
-                outputImages.push(outputUrl);
-              } catch (error) {
-                console.error(`Error processing image : ${image},`, error);
-              }
-            }
-
-            await pool.query(query, [
-              requestId,
-              product.product_name,
-              product.input_images,
-              outputImages,
-            ]);
+    await new Promise((resolve, reject) => {
+      fs.createReadStream(filePath)
+        .pipe(parse({ columns: true, trim: true }))
+        .on("data", (row) => {
+          if (!row.product_name || !row.input_images) {
+            reject(new Error("Invalid CSV format , missing columns"));
           }
-        } catch (error) {
-          console.log("Error processing CSV File");
-          return;
+
+          products.push({
+            product_name: row.product_name,
+            input_images: parseInputImages(row.input_images),
+          });
+        })
+        .on("error", async (error) => {
+          console.error(error);
+          const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
+          await pool.query(reqQuery, ["FAILED", requestId]);
+          reject(error);
+          console.log("Status Updated to FAILED");
+        })
+        .on("end", resolve);
+    });
+    const processingQuery = "UPDATE requests SET status = $1 WHERE id= $2";
+    await pool.query(processingQuery, ["PROCESSING", requestId]);
+    console.log("Status Updated to PROCESSING");
+    try {
+      const query =
+        "INSERT INTO products (request_id, product_name,input_images, output_images) VALUES ($1,$2,$3,$4)";
+
+      for (const product of products) {
+        const outputImages: string[] = [];
+        const csvRow = product.input_images;
+        const imageUrls = csvRow
+          .map((url) => url.trim())
+          .filter((url) => url !== "");
+        for (const image of imageUrls) {
+          try {
+            const response = await axios({
+              url: image,
+              responseType: "arraybuffer",
+            });
+
+            const compressedBuffer = await sharp(response.data)
+              .jpeg({ quality: 50 })
+              .toBuffer();
+
+            const outputUrl = await uploadToCloudinary(
+              compressedBuffer,
+              `compressed-${Date.now()}`
+            );
+            outputImages.push(outputUrl);
+          } catch (error) {
+            console.error(`Error processing image : ${image},`, error);
+          }
         }
-        console.log(
-          "CSV processed successfully and products added for request",
-          requestId
-        );
 
-        const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
-        await pool.query(reqQuery, ["PROCESSED", requestId]);
-        console.log("Status Updated to PROCESSED");
-
-        await triggerWebhook(
+        await pool.query(query, [
           requestId,
-          "https://webhook.site/ffd59d5f-d778-4f02-ab37-04ad438ca644"
-        );
-      });
+          product.product_name,
+          product.input_images,
+          outputImages,
+        ]);
+      }
+    } catch (error) {
+      console.log("Error processing CSV File");
+      return;
+    }
+    console.log(
+      "CSV processed successfully and products added for request",
+      requestId
+    );
+
+    const reqQuery = "UPDATE requests SET status = $1 WHERE id= $2";
+    await pool.query(reqQuery, ["PROCESSED", requestId]);
+    console.log("Status Updated to PROCESSED");
+
+    await triggerWebhook(
+      requestId,
+      "https://webhook.site/ffd59d5f-d778-4f02-ab37-04ad438ca644"
+    );
   } catch (error) {
-    console.error("Error in createProduct", error);
+    console.log("Error in create Product", error);
   }
 };
 
