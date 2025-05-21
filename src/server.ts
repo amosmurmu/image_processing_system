@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from "express";
-
+import path from "path";
 import { setupSwagger } from "./swagger";
 import uploadRoutes from "./routes/upload.route";
 import statusRoutes from "./routes/status.route";
@@ -8,11 +8,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.send("Hello world");
+  // console.log("apple" ,__dirname);
+  res.sendFile(path.join(__dirname,"../public/index.html"));
 });
 
 app.use(express.json()); // Middleware to parse JSON
-app.use(express.static("public")); // Serve static files
+app.use(express.static(path.join(__dirname,'../public'))); // Serve static files
 app.use("/api", uploadRoutes);
 app.use("/api", statusRoutes);
 setupSwagger(app);

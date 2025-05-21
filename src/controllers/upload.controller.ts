@@ -51,7 +51,8 @@ export const getIndex = async (
   res: Response,
   next: NextFunction
 ) => {
-  res.sendFile(path.join(__dirname, "../views/index.html"));
+  // console.log("apple" ,__dirname);
+  res.sendFile(path.join(__dirname, "../../public/index.html"));
 };
 
 export const createRequest = async (

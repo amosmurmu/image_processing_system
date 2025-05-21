@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.halo.min.js"></script>
+    <title>Image Processing Service</title>
+    <style>
+      body, html {
+        height: 100%;
+        margin: 0;
+      }
+      </style>
+  </head>
+  <body>
+ <div id="vanta-bg" class="h-screen w-full flex items-center justify-center">
+      <div class="bg-white bg-opacity-80 p-8 rounded-lg shadow-lg max-w-md w-full text-center">
+        <h2 class="text-3xl font-bold text-blue-600 mb-6">File Upload</h2>
+        <form
+          action="/api/upload"
+          id="uploadForm"
+          method="POST"
+          enctype="multipart/form-data"
+          class="space-y-4"
+        >
+          <input
+            type="file"
+            id="fileInput"
+            name="file"
+            required
+            class="block w-full text-sm text-gray-700 border border-gray-300 rounded p-2"
+          />
+          <button
+            type="submit"
+            class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+          >
+            Submit
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      VANTA.HALO({
+        el: "#vanta-bg",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+      });
+    </script>
+  </body>
+</html>

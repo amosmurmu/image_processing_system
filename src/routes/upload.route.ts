@@ -51,6 +51,6 @@ router.get("/file", getIndex);
  *          description: Success page loaded
  */
 router.get("/success", (req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, "../views/success.html"));
+  res.sendFile(path.join(__dirname, "../../public/success.html"));
 });
 export default router;
