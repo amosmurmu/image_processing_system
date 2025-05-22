@@ -2,6 +2,8 @@
 
 A backend API for processing images, tracking requests, and triggering webhooks.
 
+You first need to read the [Assignment File](https://drive.google.com/file/d/1Pi2vOaxfDiOc1V8g-2rPJDC1KO-d84sl/view?usp=drive_link)
+
 ## 📌Features
 
 - Upload CSV File to process images
